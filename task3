@@ -1,0 +1,113 @@
+import os
+import numpy as np
+import pandas as pd
+from elasticsearch import Elasticsearch
+import json
+import glob
+
+# Connect to Elasticsearch instance
+es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
+
+# Function to create an Elasticsearch index with mappings
+def create_index():
+    # Define mappings for the Elasticsearch index
+    mappings = {
+        "mappings": {
+            "properties": {
+                "department": {"type": "keyword"},
+                "user_id": {"type": "integer"},
+                "threat_score": {"type": "integer"},
+                "timestamp": {"type": "date"}
+            }
+        }
+    }
+
+    # Create the index if it doesn't exist
+    if not es.indices.exists(index="threat_scores"):
+        es.indices.create(index="threat_scores", body=mappings)
+        print("Created index with mappings.")
+
+# Function to generate and save random data
+def generate_and_save_random_data(file_name, means, variances, user_counts):
+    data = []
+    max_users = max(user_counts)  # Find the maximum number of users in any department
+    
+    for mean, variance, count in zip(means, variances, user_counts):
+        lower_bound = max(mean - variance, 0)
+        upper_bound = min(mean + variance + 1, 90)
+
+        # Ensure lower_bound is always less than upper_bound
+        if lower_bound >= upper_bound:
+            upper_bound = lower_bound + 1
+            print(f"Adjusted upper_bound for mean={mean} and variance={variance} to avoid low >= high error.")
+
+        # Generate threat scores
+        scores = np.random.randint(lower_bound, upper_bound, count)
+        
+        # Pad the scores with -1 (placeholder) to match the maximum user count across departments
+        if len(scores) < max_users:
+            scores = np.pad(scores, (0, max_users - len(scores)), constant_values=-1)
+        
+        data.append(scores)
+    
+    # Create the DataFrame
+    df = pd.DataFrame({f'Department_{i+1}': scores for i, scores in enumerate(data)})
+    
+    # Save the DataFrame to a CSV file
+    df.to_csv(file_name, index=False)
+    print(f"Generated and saved data to {file_name}")
+
+# Function to populate Elasticsearch index from CSV file
+def populate_index_from_csv(csv_file):
+    # Load data from CSV file
+    df = pd.read_csv(csv_file)
+
+    # Iterate over the rows and index them into Elasticsearch
+    for _, row in df.iterrows():
+        doc = {
+            "department": row["department"],
+            "user_id": row["user_id"],
+            "threat_score": row["threat_score"],
+            "timestamp": row["timestamp"]
+        }
+        es.index(index="threat_scores", body=doc)
+        print(f"Indexed document for user_id: {row['user_id']}")
+
+# Function to calculate aggregated threat score from Elasticsearch
+def calculate_aggregated_score():
+    # Query all documents from the 'threat_scores' index
+    query = {
+        "query": {
+            "match_all": {}
+        }
+    }
+
+    # Retrieve the results from Elasticsearch
+    response = es.search(index="threat_scores", body=query, size=1000)
+    scores = [hit["_source"]["threat_score"] for hit in response["hits"]["hits"]]
+
+    # Calculate the aggregated threat score (e.g., mean of all threat scores)
+    if scores:
+        aggregated_score = np.mean(scores)
+        print(f"Aggregated threat score: {aggregated_score}")
+        return aggregated_score
+    else:
+        print("No threat scores found.")
+        return None
+
+# Main function to run the workflow
+def main():
+    # Step 1: Create Elasticsearch index
+    create_index()
+
+    # Step 2: Generate and save random data to CSV
+    generate_and_save_random_data("threat_scores.csv", means=[40]*5, variances=[10]*5, user_counts=[50]*5)
+
+    # Step 3: Populate Elasticsearch index with data from CSV
+    populate_index_from_csv("threat_scores.csv")
+
+    # Step 4: Calculate and print aggregated threat score from Elasticsearch
+    calculate_aggregated_score()
+
+if __name__ == "__main__":
+    main()
