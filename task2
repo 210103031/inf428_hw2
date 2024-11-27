@@ -1,0 +1,78 @@
+import numpy as np
+import unittest
+
+
+def generate_random_data(mean, variance, num_samples):
+    lower_bound = max(mean - variance, 0)
+    upper_bound = min(mean + variance + 1, 90)
+    return np.random.randint(lower_bound, upper_bound, num_samples)
+# Generate random threat scores for a department
+
+
+def calculate_department_score(threat_scores, importance_weight):
+    average_threat = np.mean(threat_scores)
+    return average_threat * importance_weight
+# Calculate the department score based on threat scores and importance
+
+
+def calculate_aggregated_score(department_scores, importance_weights):
+    total_weight = sum(importance_weights)
+    weighted_scores = [score * weight for score, weight in zip(department_scores, importance_weights)]
+    return sum(weighted_scores) / total_weight
+# Calculate the aggregated score for all departments
+
+
+class TestAggregatedThreatScore(unittest.TestCase):
+    # Unit tests for the threat score calculations
+
+    
+    def test_case_uniform(self):
+        num_departments = 5
+        importance_weights = [1] * num_departments
+        user_counts = [20] * num_departments
+        mean = 30
+        variance = 10
+        # Test case with uniform weights and threat score distributions
+
+       
+        threat_scores = [generate_random_data(mean, variance, count) for count in user_counts]
+        department_scores = [calculate_department_score(scores, weight) 
+                             for scores, weight in zip(threat_scores, importance_weights)]
+         # Generate threat scores and calculate department scores
+
+   
+        aggregated_score = calculate_aggregated_score(department_scores, importance_weights)
+             # Calculate aggregated score
+
+       
+        self.assertGreaterEqual(aggregated_score, 0)
+        self.assertLessEqual(aggregated_score, 90)
+         # Assertions: check if the aggregated score is within valid bounds
+
+   
+    def test_case_high_variance(self):
+        means = [10, 20, 30, 70, 80]  # Different mean values per department
+        variances = [5, 10, 15, 10, 5]  # Different variances per department
+        importance_weights = [1] * len(means)
+        user_counts = [50] * len(means)
+         # Test case with varying means, variances, and importance weights
+
+        
+        threat_scores = [generate_random_data(mean, variance, count) 
+                         for mean, variance, count in zip(means, variances, user_counts)]
+        department_scores = [calculate_department_score(scores, weight) 
+                             for scores, weight in zip(threat_scores, importance_weights)]
+        # Generate threat scores and calculate department scores
+
+      
+        aggregated_score = calculate_aggregated_score(department_scores, importance_weights)
+          # Calculate aggregated score
+
+        
+        self.assertGreaterEqual(aggregated_score, 0)
+        self.assertLessEqual(aggregated_score, 90)
+        # Assertions: check if the aggregated score is within valid bounds
+        
+# Run the tests
+if __name__ == '__main__':
+    unittest.main()
